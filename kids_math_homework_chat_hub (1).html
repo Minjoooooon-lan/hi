@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Quest & Family Chat Hub</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for playful icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts: Poppins & Fredoka for playful kid-friendly look -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        fredoka: ['Fredoka', 'sans-serif'],
+                        poppins: ['Poppins', 'sans-serif'],
+                    },
+                    colors: {
+                        kidyellow: '#FFDE59',
+                        kidblue: '#00B4D8',
+                        kidgreen: '#52B788',
+                        kidpink: '#FF70A6',
+                        kidpurple: '#9B5DE5',
+                        kidorange: '#F15BB5',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+        h1, h2, h3, .font-fun {
+            font-family: 'Fredoka', sans-serif;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col text-slate-800">
+
+    <div id="app" class="flex-1 flex flex-col">
+        <!-- Dynamic views rendered here -->
+    </div>
+
+    <!-- Custom Modal for Notifications / Password Prompt / Alerts -->
+    <div id="customModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div id="modalContent" class="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl transform transition-all scale-95 opacity-0 duration-300">
+            <div id="modalIcon" class="text-4xl mb-4 text-center">✨</div>
+            <h3 id="modalTitle" class="text-2xl font-bold font-fun text-center text-slate-800 mb-2">Notice</h3>
+            <p id="modalMessage" class="text-slate-600 text-center mb-6">Message goes here.</p>
+            <div id="modalBody" class="mb-6"></div>
+            <div id="modalButtons" class="flex gap-3 justify-center">
+                <button id="modalCloseBtn" onclick="closeModal()" class="px-6 py-2.5 bg-slate-200 hover:bg-slate-300 font-semibold rounded-full transition-all">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DATA STATE & LOCALSTORAGE MANAGEMENT ---
+        const STORAGE_KEY = "math_quest_app_data_v2";
+
+        function getDefaultData() {
+            return {
+                parents: [
+                    { id: 'parent_default', name: 'Parent', password: '123' }
+                ],
+                children: [
+                    { id: 'minjoon', name: 'Minjoon', avatar: '👦', color: 'bg-kidblue' },
+                    { id: 'evan', name: 'Evan', avatar: '🧒', color: 'bg-kidpink' }
+                ],
+                submissions: [],
+                messages: []
+            };
+        }
+
+        let appData = loadAppData();
+
+        function loadAppData() {
+            const data = localStorage.getItem(STORAGE_KEY);
+            if (!data) {
+                const initial = getDefaultData();
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+                return initial;
+            }
+            try {
+                return JSON.parse(data);
+            } catch (e) {
+                return getDefaultData();
+            }
+        }
+
+        function saveAppData() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+        }
+
+        // --- SESSION STATE ---
+        let currentSession = {
+            role: null, // 'parent' or 'child'
+            userId: null,
+            userName: null
+        };
+
+        // --- MODAL UTILITIES ---
+        function showModal(title, message, icon = '✨', customHtml = '', buttonsHtml = null) {
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalMessage').innerText = message;
+            document.getElementById('modalIcon').innerText = icon;
+            document.getElementById('modalBody').innerHTML = customHtml;
+            
+            const btnContainer = document.getElementById('modalButtons');
+            if (buttonsHtml) {
+                btnContainer.innerHTML = buttonsHtml;
+            } else {
+                btnContainer.innerHTML = `<button onclick="closeModal()" class="px-6 py-2.5 bg-kidblue text-white font-semibold rounded-full shadow-md hover:bg-sky-600 transition-all">Got it!</button>`;
+            }
+
+            const modal = document.getElementById('customModal');
+            const content = document.getElementById('modalContent');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+                content.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('customModal');
+            const content = document.getElementById('modalContent');
+            content.classList.remove('scale-100', 'opacity-100');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        // --- STREAMING_CHUNK:Rendering Main Screens ---
+        function render() {
+            const app = document.getElementById('app');
+            app.innerHTML = '';
+
+            if (!currentSession.role) {
+                app.innerHTML = renderHomeScreen();
+            } else if (currentSession.role === 'child') {
+                app.innerHTML = renderChildDashboard();
+                initChatListeners();
+            } else if (currentSession.role === 'parent') {
+                app.innerHTML = renderParentDashboard();
+                initChatListeners();
+            }
+        }
+
+        // --- 1. HOME SCREEN / PROFILE SELECTION ---
+        function renderHomeScreen() {
+            // Build parent buttons list dynamically
+            let parentButtonsHtml = '';
+            appData.parents.forEach(p => {
+                parentButtonsHtml += `
+                    <button onclick="promptParentLogin('${p.id}', '${p.name}')" class="group relative bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-500 hover:to-orange-500 text-white font-fun text-xl py-5 px-8 rounded-3xl shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-4 border-4 border-white/60">
+                        <span class="text-3xl bg-white/20 p-3 rounded-2xl">👑</span>
+                        <div class="text-left">
+                            <div class="text-2xl font-bold">${p.name} (Parent)</div>
+                            <div class="text-xs font-normal opacity-90">Click to login with password</div>
+                        </div>
+                    </button>
+                `;
+            });
+
+            return `
+                <div class="flex-1 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+                    <!-- Background decorative blobs -->
+                    <div class="absolute -top-20 -left-20 w-72 h-72 bg-kidyellow rounded-full filter blur-3xl opacity-40 animate-pulse"></div>
+                    <div class="absolute -bottom-20 -right-20 w-80 h-80 bg-kidpink rounded-full filter blur-3xl opacity-40 animate-pulse"></div>
+
+                    <div class="max-w-3xl w-full bg-white/80 backdrop-blur-md rounded-3xl shadow-2xl p-8 md:p-12 text-center border border-white relative z-10">
+                        <div class="inline-block bg-kidpurple/10 text-kidpurple font-semibold px-4 py-1.5 rounded-full text-sm mb-4">
+                            🚀 Math Quest & Family Hub
+                        </div>
+                        <h1 class="text-4xl md:text-5xl font-extrabold font-fun text-slate-800 mb-3">
+                            Who is using the app today?
+                        </h1>
+                        <p class="text-slate-600 mb-10 text-lg">Choose your profile or set up a parent account to begin!</p>
+
+                        <!-- Profiles Grid -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                            <!-- Minjoon Profile Button -->
+                            <button onclick="selectChild('minjoon', 'Minjoon')" class="group bg-gradient-to-br from-cyan-400 to-blue-500 hover:from-cyan-500 hover:to-blue-600 text-white p-6 rounded-3xl shadow-lg hover:shadow-xl transform hover:-translate-y-1.5 transition-all duration-300 flex items-center gap-5 text-left border-4 border-white/60">
+                                <div class="w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center text-4xl shadow-inner">👦</div>
+                                <div>
+                                    <div class="text-3xl font-fun font-bold">Minjoon</div>
+                                    <div class="text-cyan-100 text-sm mt-0.5">Click to open your math world!</div>
+                                </div>
+                            </button>
+
+                            <!-- Evan Profile Button -->
+                            <button onclick="selectChild('evan', 'Evan')" class="group bg-gradient-to-br from-pink-400 to-rose-500 hover:from-pink-500 hover:to-rose-600 text-white p-6 rounded-3xl shadow-lg hover:shadow-xl transform hover:-translate-y-1.5 transition-all duration-300 flex items-center gap-5 text-left border-4 border-white/60">
+                                <div class="w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center text-4xl shadow-inner">🧒</div>
+                                <div>
+                                    <div class="text-3xl font-fun font-bold">Evan</div>
+                                    <div class="text-pink-100 text-sm mt-0.5">Click to open your math world!</div>
+                                </div>
+                            </button>
+                        </div>
+
+                        <!-- Parent Accounts / Create Section -->
+                        <div class="space-y-4 pt-6 border-t border-slate-200">
+                            <h2 class="text-xl font-fun font-bold text-slate-700 mb-3">Parent Access</h2>
+                            <div class="flex flex-wrap justify-center gap-4">
+                                ${parentButtonsHtml}
+                            </div>
+                            <div class="mt-4">
+                                <button onclick="openCreateParentModal()" class="text-kidpurple hover:text-purple-700 font-semibold text-sm underline underline-offset-4 flex items-center justify-center gap-2 mx-auto">
+                                    <i class="fa-solid fa-user-plus"></i> Create New Parent Account
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- PARENT CREATION & LOGIN MODALS ---
+        function openCreateParentModal() {
+            const html = `
+                <div class="space-y-4 text-left">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Parent Name</label>
+                        <input type="text" id="newParentName" placeholder="e.g. Mom, Dad, or Guardian" class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-kidpurple">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Secret Password (so kids can't access)</label>
+                        <input type="password" id="newParentPass" placeholder="Enter secure password" class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-kidpurple">
+                    </div>
+                </div>
+            `;
+            const buttons = `
+                <button onclick="closeModal()" class="px-5 py-2.5 bg-slate-200 text-slate-700 font-semibold rounded-full hover:bg-slate-300 transition-all">Cancel</button>
+                <button onclick="createParentAccount()" class="px-6 py-2.5 bg-kidpurple text-white font-semibold rounded-full shadow-md hover:bg-purple-700 transition-all">Create Profile</button>
+            `;
+            showModal("Create Parent Account", "Set up your secure parent profile below.", "🔒", html, buttons);
+        }
+
+        function createParentAccount() {
+            const name = document.getElementById('newParentName').value.trim();
+            const pass = document.getElementById('newParentPass').value.trim();
+            if (!name || !pass) {
+                showModal("Missing Info", "Please enter both a name and a password.", "⚠️");
+                return;
+            }
+            const newId = 'parent_' + Date.now();
+            appData.parents.push({ id: newId, name: name, password: pass });
+            saveAppData();
+            closeModal();
+            showModal("Success!", `Parent account '${name}' created successfully!`, "🎉");
+            render();
+        }
+
+        function promptParentLogin(parentId, parentName) {
+            const html = `
+                <div class="space-y-4 text-left">
+                    <p class="text-sm text-slate-600">Enter password for <strong>${parentName}</strong>:</p>
+                    <input type="password" id="loginParentPass" placeholder="Enter password" class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                </div>
+            `;
+            const buttons = `
+                <button onclick="closeModal()" class="px-5 py-2.5 bg-slate-200 text-slate-700 font-semibold rounded-full hover:bg-slate-300 transition-all">Cancel</button>
+                <button onclick="verifyParentLogin('${parentId}', '${parentName}')" class="px-6 py-2.5 bg-amber-500 text-white font-semibold rounded-full shadow-md hover:bg-amber-600 transition-all">Login</button>
+            `;
+            showModal("Parent Verification", "Protected Profile", "🛡️", html, buttons);
+        }
+
+        function verifyParentLogin(parentId, parentName) {
+            const passInput = document.getElementById('loginParentPass').value;
+            const parentObj = appData.parents.find(p => p.id === parentId);
+            if (parentObj && parentObj.password === passInput) {
+                closeModal();
+                currentSession = {
+                    role: 'parent',
+                    userId: parentObj.id,
+                    userName: parentObj.name
+                };
+                render();
+            } else {
+                showModal("Incorrect Password", "The password you entered is incorrect. Try again.", "❌");
+            }
+        }
+
+        function selectChild(childId, childName) {
+            currentSession = {
+                role: 'child',
+                userId: childId,
+                userName: childName
+            };
+            render();
+        }
+
+        function logout() {
+            currentSession = { role: null, userId: null, userName: null };
+            render();
+        }
+
+        // --- 2. KID DASHBOARD (Minjoon / Evan) ---
+        function renderChildDashboard() {
+            const childId = currentSession.userId;
+            const childName = currentSession.userName;
+            const childSubmissions = appData.submissions.filter(s => s.childId === childId);
+
+            return `
+                <!-- Top Navbar -->
+                <header class="bg-white shadow-md px-6 py-4 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-2xl ${childId === 'minjoon' ? 'bg-kidblue text-white' : 'bg-kidpink text-white'} flex items-center justify-center text-2xl shadow">
+                            ${childId === 'minjoon' ? '👦' : '🧒'}
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-fun font-bold text-slate-800">Hi, ${childName}! 👋</h2>
+                            <p class="text-xs text-slate-500">Welcome to your Math Homework Station</p>
+                        </div>
+                    </div>
+                    <button onclick="logout()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-full text-sm transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-arrow-right-from-bracket"></i> Switch Profile
+                    </button>
+                </header>
+
+                <!-- Main Content Area -->
+                <main class="flex-1 max-w-6xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-y-auto">
+                    <!-- Left 2 Cols: Homework & Submission -->
+                    <div class="lg:col-span-2 space-y-6">
+                        
+                        <!-- Upload / Take Picture Card -->
+                        <div class="bg-white rounded-3xl p-6 shadow-xl border border-slate-100">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="text-2xl font-fun font-bold text-slate-800 flex items-center gap-2">
+                                    <span class="text-3xl">📸</span> Submit Math Homework
+                                </h3>
+                                <span class="bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full">Double Points Challenge!</span>
+                            </div>
+                            <p class="text-slate-600 mb-6">Take a picture or upload an image of your completed math homework page so Mom/Dad can grade it!</p>
+
+                            <form onsubmit="handleHomeworkSubmission(event)" class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-semibold text-slate-700 mb-2">Upload Homework Image</label>
+                                    <div class="border-2 border-dashed border-slate-300 rounded-2xl p-6 text-center hover:border-kidblue transition-all bg-slate-50 cursor-pointer relative" onclick="document.getElementById('hwImageInput').click()">
+                                        <input type="file" id="hwImageInput" accept="image/*" class="hidden" onchange="previewSelectedImage(event)">
+                                        <div id="uploadPreviewContainer" class="space-y-2">
+                                            <i class="fa-solid fa-cloud-arrow-up text-4xl text-slate-400"></i>
+                                            <p class="text-sm font-medium text-slate-600">Click to browse or take a photo</p>
+                                            <p class="text-xs text-slate-400">(PNG, JPG, or simulated snapshot)</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-semibold text-slate-700 mb-2">Add a note for Mom/Dad</label>
+                                    <input type="text" id="hwNotes" placeholder="e.g. Page 42, finished all questions!" class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-kidblue">
+                                </div>
+
+                                <button type="submit" class="w-full py-4 bg-gradient-to-r from-kidblue to-cyan-500 hover:from-sky-600 hover:to-cyan-600 text-white font-fun font-bold text-lg rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2">
+                                    <i class="fa-solid fa-paper-plane"></i> Send to Parent for Grading!
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Previous Submissions List -->
+                        <div class="bg-white rounded-3xl p-6 shadow-xl border border-slate-100">
+                            <h3 class="text-xl font-fun font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                <span class="text-2xl">📋</span> My Homework History
+                            </h3>
+                            <div id="childSubmissionsList" class="space-y-4">
+                                ${childSubmissions.length === 0 ? '<p class="text-slate-500 text-center py-6">No homework submitted yet. Upload your first one above!</p>' : ''}
+                                ${childSubmissions.map(sub => `
+                                    <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                                        <div class="flex items-center gap-4">
+                                            <img src="${sub.imageUrl}" alt="Homework" class="w-20 h-20 object-cover rounded-xl border shadow-sm" onerror="this.src='https://placehold.co/100x100/png?text=Math'">
+                                            <div>
+                                                <div class="text-xs text-slate-500">${new Date(sub.date).toLocaleDateString()} at ${new Date(sub.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                                                <div class="font-semibold text-slate-800">${sub.notes || 'Math Homework Page'}</div>
+                                                <div class="mt-1 flex items-center gap-2">
+                                                    ${sub.status === 'graded' 
+                                                        ? `<span class="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full"><i class="fa-solid fa-check"></i> Graded: ${sub.scoreCorrect}/${sub.totalProblems} Correct</span>
+                                                           <span class="bg-amber-100 text-amber-900 text-xs font-extrabold px-2.5 py-0.5 rounded-full">⭐ Points Earned: ${sub.pointsEarned}</span>`
+                                                        : `<span class="bg-sky-100 text-sky-800 text-xs font-bold px-2.5 py-0.5 rounded-full"><i class="fa-solid fa-clock"></i> Waiting for Parent Grade</span>`
+                                                    }
+                                                </div>
+                                                ${sub.parentFeedback ? `<p class="text-xs text-slate-600 mt-1 italic">Parent Feedback: "${sub.parentFeedback}"</p>` : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Right Col: Real-Time Chat with Parent -->
+                    <div class="bg-white rounded-3xl p-6 shadow-xl border border-slate-100 flex flex-col h-[600px]">
+                        <h3 class="text-xl font-fun font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <span class="text-2xl">💬</span> Chat with Parent
+                        </h3>
+                        <!-- Messages Container -->
+                        <div id="chatMessagesContainer" class="flex-1 overflow-y-auto space-y-3 pr-2 mb-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                            <!-- Rendered by JS -->
+                        </div>
+                        <!-- Send Message Form -->
+                        <form onsubmit="handleSendMessage(event)" class="flex gap-2">
+                            <input type="text" id="chatInputMessage" placeholder="Type a message to parent..." class="flex-1 px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-kidblue text-sm">
+                            <button type="submit" class="bg-kidblue hover:bg-sky-600 text-white px-5 rounded-xl shadow font-semibold transition-all">
+                                <i class="fa-solid fa-paper-plane"></i>
+                            </button>
+                        </form>
+                    </div>
+                </main>
+            `;
+        }
+
+        let selectedImageBase64 = 'https://placehold.co/600x400/00B4D8/ffffff?text=Math+Homework+Snapshot';
+
+        function previewSelectedImage(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    selectedImageBase64 = e.target.result;
+                    document.getElementById('uploadPreviewContainer').innerHTML = `
+                        <img src="${selectedImageBase64}" class="h-28 mx-auto object-cover rounded-xl shadow mb-2">
+                        <p class="text-xs font-semibold text-emerald-600"><i class="fa-solid fa-check-circle"></i> Image ready to send!</p>
+                    `;
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function handleHomeworkSubmission(event) {
+            event.preventDefault();
+            const notes = document.getElementById('hwNotes').value.trim();
+            const childId = currentSession.userId;
+            const childName = currentSession.userName;
+
+            const newSub = {
+                id: 'sub_' + Date.now(),
+                childId: childId,
+                childName: childName,
+                date: new Date().toISOString(),
+                imageUrl: selectedImageBase64,
+                notes: notes || 'Math Homework Page',
+                status: 'pending',
+                scoreCorrect: 0,
+                totalProblems: 10,
+                pointsEarned: 0,
+                parentFeedback: ''
+            };
+
+            appData.submissions.unshift(newSub);
+            saveAppData();
+            
+            // Also add automated chat notification
+            appData.messages.push({
+                id: 'msg_' + Date.now(),
+                senderId: childId,
+                senderName: childName,
+                recipientId: 'parent',
+                text: `I just submitted my math homework! ("${newSub.notes}")`,
+                timestamp: new Date().toISOString()
+            });
+            saveAppData();
+
+            showModal("Homework Sent! 🎉", "Your homework has been successfully sent to Mom/Dad for grading!", "🌟");
+            render();
+        }
+
+        // --- 3. PARENT DASHBOARD ---
+        function renderParentDashboard() {
+            const parentName = currentSession.userName;
+            const pendingSubmissions = appData.submissions.filter(s => s.status === 'pending');
+            const gradedSubmissions = appData.submissions.filter(s => s.status === 'graded');
+
+            // Determine active chat partner (default to minjoon if not selected)
+            if (!window.currentChatChildId) {
+                window.currentChatChildId = 'minjoon';
+            }
+            const activeChildObj = appData.children.find(c => c.id === window.currentChatChildId) || appData.children[0];
+
+            return `
+                <!-- Top Navbar -->
+                <header class="bg-slate-900 text-white shadow-lg px-6 py-4 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center text-2xl shadow">
+                            👑
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-fun font-bold">Parent Portal: ${parentName}</h2>
+                            <p class="text-xs text-slate-400">Review homework submissions and chat with children</p>
+                        </div>
+                    </div>
+                    <button onclick="logout()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-full text-sm transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-arrow-right-from-bracket"></i> Logout Parent
+                    </button>
+                </header>
+
+                <!-- Main Content Area -->
+                <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-y-auto">
+                    <!-- Left 2 Cols: Submissions & Grading -->
+                    <div class="lg:col-span-2 space-y-6">
+                        
+                        <!-- Pending Submissions Header & List -->
+                        <div class="bg-white rounded-3xl p-6 shadow-xl border border-slate-100">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="text-2xl font-fun font-bold text-slate-800 flex items-center gap-2">
+                                    <span class="text-3xl">⏳</span> Submissions to Grade (${pendingSubmissions.length})
+                                </h3>
+                            </div>
+                            
+                            <div class="space-y-4">
+                                ${pendingSubmissions.length === 0 ? `
+                                    <div class="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                        <p class="text-slate-500 font-medium">All caught up! No pending homework to grade.</p>
+                                    </div>
+                                ` : ''}
+                                
+                                ${pendingSubmissions.map(sub => `
+                                    <div class="p-5 rounded-2xl border-2 border-amber-200 bg-amber-50/40 flex flex-col md:flex-row gap-5 items-start justify-between">
+                                        <div class="flex items-start gap-4">
+                                            <img src="${sub.imageUrl}" alt="Homework" class="w-28 h-28 object-cover rounded-xl border shadow cursor-pointer hover:opacity-90" onclick="showModal('Homework Image', '', '📄', '<img src=\x27${sub.imageUrl}\x27 class=\x27w-full rounded-2xl shadow\x27>')">
+                                            <div>
+                                                <div class="flex items-center gap-2 mb-1">
+                                                    <span class="font-bold text-lg text-slate-800">${sub.childName}</span>
+                                                    <span class="text-xs bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full">${new Date(sub.date).toLocaleDateString()}</span>
+                                                </div>
+                                                <p class="text-sm text-slate-600 mb-2">${sub.notes}</p>
+                                                <span class="bg-amber-100 text-amber-800 text-xs font-bold px-2.5 py-1 rounded-full"><i class="fa-solid fa-hourglass-half"></i> Awaiting Grade</span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Grading Form Inline -->
+                                        <div class="w-full md:w-auto bg-white p-4 rounded-2xl border shadow-sm space-y-3">
+                                            <div class="text-xs font-bold text-slate-700">Grade Homework (Score / Total)</div>
+                                            <div class="flex items-center gap-2">
+                                                <input type="number" id="grade_correct_${sub.id}" min="0" max="20" placeholder="Correct" class="w-20 px-3 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-amber-400">
+                                                <span class="text-slate-500 font-bold">/</span>
+                                                <input type="number" id="grade_total_${sub.id}" value="${sub.totalProblems}" class="w-20 px-3 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-amber-400">
+                                            </div>
+                                            <input type="text" id="grade_feedback_${sub.id}" placeholder="Feedback (optional)" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
+                                            <button onclick="submitGrade('${sub.id}')" class="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow text-sm transition-all">
+                                                Submit Grade & Double Points! ⭐
+                                            </button>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <!-- Graded History -->
+                        <div class="bg-white rounded-3xl p-6 shadow-xl border border-slate-100">
+                            <h3 class="text-xl font-fun font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                <span class="text-2xl">✅</span> Recently Graded Submissions
+                            </h3>
+                            <div class="space-y-3">
+                                ${gradedSubmissions.length === 0 ? '<p class="text-slate-500 text-center py-4">No graded submissions yet.</p>' : ''}
+                                ${gradedSubmissions.slice(0, 5).map(sub => `
+                                    <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-between">
+                                        <div class="flex items-center gap-3">
+                                            <img src="${sub.imageUrl}" class="w-14 h-14 object-cover rounded-lg border">
+                                            <div>
+                                                <div class="font-bold text-slate-800">${sub.childName} - <span class="text-emerald-600">${sub.scoreCorrect}/${sub.totalProblems} Correct</span></div>
+                                                <div class="text-xs text-slate-500">Points Awarded (Doubled): <strong class="text-amber-600">${sub.pointsEarned} pts</strong> | ${sub.parentFeedback ? 'Feedback: ' + sub.parentFeedback : ''}</div>
+                                            </div>
+                                        </div>
+                                        <span class="text-xs bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full font-semibold">Graded</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Right Col: Two-Way Chat with Children -->
+                    <div class="bg-white rounded-3xl p-6 shadow-xl border border-slate-100 flex flex-col h-[650px]">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-xl font-fun font-bold text-slate-800 flex items-center gap-2">
+                                <span class="text-2xl">💬</span> Family Chat
+                            </h3>
+                            <!-- Child Switcher Tabs for Chat -->
+                            <div class="flex bg-slate-100 p-1 rounded-xl">
+                                ${appData.children.map(c => `
+                                    <button onclick="switchChatChild('${c.id}')" class="px-3 py-1 rounded-lg text-xs font-bold transition-all ${window.currentChatChildId === c.id ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}">
+                                        ${c.name}
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <!-- Chat Messages Container -->
+                        <div id="chatMessagesContainer" class="flex-1 overflow-y-auto space-y-3 pr-2 mb-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                            <!-- Rendered by JS -->
+                        </div>
+
+                        <!-- Send Message Form -->
+                        <form onsubmit="handleSendMessage(event)" class="flex gap-2">
+                            <input type="text" id="chatInputMessage" placeholder="Message ${activeChildObj.name}..." class="flex-1 px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm">
+                            <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-white px-5 rounded-xl shadow font-semibold transition-all">
+                                <i class="fa-solid fa-paper-plane"></i>
+                            </button>
+                        </form>
+                    </div>
+                </main>
+            `;
+        }
+
+        function switchChatChild(childId) {
+            window.currentChatChildId = childId;
+            render();
+        }
+
+        function submitGrade(subId) {
+            const correctInput = document.getElementById(`grade_correct_${subId}`).value;
+            const totalInput = document.getElementById(`grade_total_${subId}`).value;
+            const feedback = document.getElementById(`grade_feedback_${subId}`).value;
+
+            const correct = parseInt(correctInput);
+            const total = parseInt(totalInput);
+
+            if (isNaN(correct) || correct < 0 || isNaN(total) || total <= 0 || correct > total) {
+                showModal("Invalid Score", "Please enter a valid correct score and total problems.", "⚠️");
+                return;
+            }
+
+            // Double the correct score for points as requested!
+            const pointsEarned = correct * 2;
+
+            const sub = appData.submissions.find(s => s.id === subId);
+            if (sub) {
+                sub.status = 'graded';
+                sub.scoreCorrect = correct;
+                sub.totalProblems = total;
+                sub.pointsEarned = pointsEarned;
+                sub.parentFeedback = feedback;
+                saveAppData();
+
+                // Send chat notification to child
+                appData.messages.push({
+                    id: 'msg_' + Date.now(),
+                    senderId: currentSession.userId,
+                    senderName: currentSession.userName,
+                    recipientId: sub.childId,
+                    text: `I graded your math homework! You got ${correct}/${total} correct and earned ⭐ ${pointsEarned} points!`,
+                    timestamp: new Date().toISOString()
+                });
+                saveAppData();
+
+                showModal("Homework Graded! 🎉", `Successfully graded! Points earned (doubled score): ${pointsEarned} ⭐`, "🌟");
+                render();
+            }
+        }
+
+        // --- 4. REAL-TIME CHAT LOGIC ---
+        function initChatListeners() {
+            renderChatMessages();
+            // Scroll chat to bottom
+            const container = document.getElementById('chatMessagesContainer');
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+
+        function renderChatMessages() {
+            const container = document.getElementById('chatMessagesContainer');
+            if (!container) return;
+
+            let relevantMessages = [];
+            if (currentSession.role === 'child') {
+                const childId = currentSession.userId;
+                // Messages between this child and any parent
+                relevantMessages = appData.messages.filter(m => m.senderId === childId || m.recipientId === childId);
+            } else if (currentSession.role === 'parent') {
+                const chatChildId = window.currentChatChildId || 'minjoon';
+                // Messages between parent and the selected child
+                relevantMessages = appData.messages.filter(m => m.senderId === chatChildId || m.recipientId === chatChildId);
+            }
+
+            // Sort chronological
+            relevantMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+            if (relevantMessages.length === 0) {
+                container.innerHTML = `<div class="text-center text-slate-400 py-8 text-sm">No messages yet. Say hello! 👋</div>`;
+                return;
+            }
+
+            container.innerHTML = relevantMessages.map(m => {
+                let isMe = false;
+                if (currentSession.role === 'child') {
+                    isMe = m.senderId === currentSession.userId;
+                } else {
+                    // Parent view: messages sent by parent or received from active child
+                    isMe = m.senderId.startsWith('parent');
+                }
+
+                return `
+                    <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-2">
+                        <div class="text-[10px] text-slate-500 mb-0.5 px-1">${m.senderName} • ${new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                        <div class="max-w-[80%] px-4 py-2.5 rounded-2xl text-sm shadow-sm ${isMe ? 'bg-sky-500 text-white rounded-br-none' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none'}">
+                            ${escapeHtml(m.text)}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function handleSendMessage(event) {
+            event.preventDefault();
+            const input = document.getElementById('chatInputMessage');
+            const text = input.value.trim();
+            if (!text) return;
+
+            let recipientId = 'parent_default';
+            if (currentSession.role === 'parent') {
+                recipientId = window.currentChatChildId || 'minjoon';
+            } else {
+                recipientId = 'parent_default';
+            }
+
+            const newMsg = {
+                id: 'msg_' + Date.now(),
+                senderId: currentSession.userId,
+                senderName: currentSession.userName,
+                recipientId: recipientId,
+                text: text,
+                timestamp: new Date().toISOString()
+            };
+
+            appData.messages.push(newMsg);
+            saveAppData();
+            input.value = '';
+            renderChatMessages();
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        // Initial render on window load
+        window.onload = function() {
+            render();
+        };
+    </script>
+</body>
+</html>
